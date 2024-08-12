@@ -1,39 +1,26 @@
 import os
 import mailtrap as mt
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+from src.schema import BuildingServicesSearchResult
+
 env = Environment(
-    loader=FileSystemLoader("src/sendmail"),
-    autoescape=select_autoescape()
+    loader=FileSystemLoader("src/sendmail"), autoescape=select_autoescape()
 )
 
-def send_email(args):
+
+def send_email(records: list[BuildingServicesSearchResult]):
     MAILTRAP_API_TOKEN = os.environ.get("MAILTRAP_API_TOKEN")
-    MAILTRAP_SENDER_ADDRESS = os.environ.get("MAILTRAP_SENDER_ADDRESS") 
+    MAILTRAP_SENDER_ADDRESS = os.environ.get("MAILTRAP_SENDER_ADDRESS")
     MAILTRAP_TO_ADDRESS = os.environ.get("MAILTRAP_TO_ADDRESS")
     MAILTRAP_BCC_ADDRESS = os.environ.get("MAILTRAP_BCC_ADDRESS")
 
-   
     mainTemplate = env.get_template("template.html")
     dataTemplate = env.get_template("record.html")
 
-    templates = []
-    
-    # For each record, fill the data template, then put the data into the main template
-    for record in args:    
-        templates.append(dataTemplate.render(
-        record_number=record.record_number,
-        record_type=record.record_type.value,
-        project_name=record.project_name,
-        address=record.address,
-        expiration_date=record.expiration_date,
-        short_notes=record.short_notes,
-        record_link=record.record_details_link
-    ))
-
-
-    filled_template = mainTemplate.render(records=templates)
-
-    # print(filled_template)
+    filled_template = mainTemplate.render(
+        records=[dataTemplate.render(record=record) for record in records]
+    )
 
     mail = mt.Mail(
         sender=mt.Address(email=MAILTRAP_SENDER_ADDRESS, name="Code For Dayton"),
@@ -47,12 +34,12 @@ def send_email(args):
     try:
         client = mt.MailtrapClient(token=MAILTRAP_API_TOKEN)
         client.send(mail)
-    except mt.exceptions.AuthorizationError as e:
+    except mt.exceptions.AuthorizationError:
         # Handle the authorization error here
-        return {"error": f"Mailtrap authorization error, {MAILTRAP_SENDER_ADDRESS}, {MAILTRAP_TO_ADDRESS}", "body": args, "filled_template": filled_template}
+        return {
+            "error": f"Mailtrap authorization error, {MAILTRAP_SENDER_ADDRESS}, {MAILTRAP_TO_ADDRESS}",
+            "body": records,
+            "filled_template": filled_template,
+        }
 
-    return {"body": args}
-
-    
-
-    
+    return {"body": records}
